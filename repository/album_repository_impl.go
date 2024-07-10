@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"openmusic-api/helper"
 	"openmusic-api/model/domain"
 
@@ -14,6 +15,15 @@ type AlbumRepositoryImpl struct {
 
 func NewAlbumRepositoryImpl() AlbumRepository {
 	return &AlbumRepositoryImpl{}
+}
+
+func (r *AlbumRepositoryImpl) Exist(ctx context.Context, db *gorm.DB, id string) (bool, error) {
+	var total int64
+	if err := db.WithContext(ctx).Model(&domain.Album{}).Where("id = ?", id).Count(&total).Error; err != nil {
+		return false, err
+	}
+
+	return total > 0, nil
 }
 
 func (r *AlbumRepositoryImpl) Create(ctx context.Context, db *gorm.DB, album domain.Album) (domain.Album, error) {
@@ -32,7 +42,7 @@ func (r *AlbumRepositoryImpl) Create(ctx context.Context, db *gorm.DB, album dom
 }
 
 func (r *AlbumRepositoryImpl) Update(ctx context.Context, db *gorm.DB, album domain.Album) (domain.Album, error) {
-	if err := db.WithContext(ctx).Save(&album).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&album).Updates(&album).Error; err != nil {
 		return album, err
 	}
 
@@ -52,10 +62,10 @@ func (r *AlbumRepositoryImpl) Delete(ctx context.Context, db *gorm.DB, album dom
 	return nil
 }
 
-func (r *AlbumRepositoryImpl) FindById(ctx context.Context, db *gorm.DB, albumId string) (domain.Album, error) {
+func (r *AlbumRepositoryImpl) FindById(ctx context.Context, db *gorm.DB, id string) (domain.Album, error) {
 	var album domain.Album
-	if err := db.WithContext(ctx).Where("id = ?", albumId).First(&album).Error; err != nil {
-		return album, err
+	if err := db.WithContext(ctx).Where("id = ?", id).First(&album).Error; err != nil {
+		return album, fiber.NewError(fiber.StatusNotFound, fmt.Sprintf("album with id %s not found", id))
 	}
 
 	return album, nil

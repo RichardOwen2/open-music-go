@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"openmusic-api/helper"
 	"openmusic-api/model/domain"
 
 	"github.com/gofiber/fiber/v2"
@@ -15,25 +17,43 @@ func NewSongRepositoryImpl() SongRepository {
 	return &SongRepositoryImpl{}
 }
 
-func (r *SongRepositoryImpl) checkAlbumExists(ctx context.Context, db *gorm.DB, albumId string) (bool, error) {
-	var exists bool
-
-	if err := db.WithContext(ctx).Model(&domain.Album{}).Select("count(*) > 0").Where("id = ?", albumId).Find(&exists).Error; err != nil {
+func (r *SongRepositoryImpl) checkAlbumExists(ctx context.Context, db *gorm.DB, id string) (bool, error) {
+	var total int64
+	if err := db.WithContext(ctx).Model(&domain.Album{}).Where("id = ?", id).Count(&total).Error; err != nil {
 		return false, err
 	}
 
-	return exists, nil
+	return total > 0, nil
+}
+
+func (r *SongRepositoryImpl) Exist(ctx context.Context, db *gorm.DB, id string) (bool, error) {
+	var total int64
+	if err := db.WithContext(ctx).Model(&domain.Song{}).Where("id = ?", id).Count(&total).Error; err != nil {
+		return false, err
+	}
+
+	return total > 0, nil
 }
 
 func (r *SongRepositoryImpl) Create(ctx context.Context, db *gorm.DB, song domain.Song) (domain.Song, error) {
-	exist, err := r.checkAlbumExists(ctx, db, *song.AlbumID)
+	id, err := helper.GenerateId("song")
+	song.ID = id
 
 	if err != nil {
 		return song, err
 	}
 
-	if !exist {
-		return song, fiber.NewError(fiber.StatusNotFound, "album not found")
+	if *song.AlbumID != "" {
+		exist, err := r.checkAlbumExists(ctx, db, *song.AlbumID)
+		if err != nil {
+			return song, err
+		}
+
+		if !exist {
+			return song, fiber.NewError(fiber.StatusNotFound, "album not found")
+		}
+	} else {
+		song.AlbumID = nil
 	}
 
 	if err := db.WithContext(ctx).Create(&song).Error; err != nil {
@@ -44,14 +64,17 @@ func (r *SongRepositoryImpl) Create(ctx context.Context, db *gorm.DB, song domai
 }
 
 func (r *SongRepositoryImpl) Update(ctx context.Context, db *gorm.DB, song domain.Song) (domain.Song, error) {
-	exist, err := r.checkAlbumExists(ctx, db, *song.AlbumID)
+	if *song.AlbumID != "" {
+		exist, err := r.checkAlbumExists(ctx, db, *song.AlbumID)
+		if err != nil {
+			return song, err
+		}
 
-	if err != nil {
-		return song, err
-	}
-
-	if !exist {
-		return song, fiber.NewError(fiber.StatusNotFound, "album not found")
+		if !exist {
+			return song, fiber.NewError(fiber.StatusNotFound, "album not found")
+		}
+	} else {
+		song.AlbumID = nil
 	}
 
 	if err := db.WithContext(ctx).Save(&song).Error; err != nil {
@@ -75,10 +98,10 @@ func (r *SongRepositoryImpl) Delete(ctx context.Context, db *gorm.DB, song domai
 	return nil
 }
 
-func (r *SongRepositoryImpl) FindById(ctx context.Context, db *gorm.DB, songId int) (domain.Song, error) {
+func (r *SongRepositoryImpl) FindById(ctx context.Context, db *gorm.DB, id string) (domain.Song, error) {
 	var song domain.Song
-	if err := db.WithContext(ctx).Where("id = ?", songId).First(&song).Error; err != nil {
-		return song, err
+	if err := db.WithContext(ctx).Where("id = ?", id).First(&song).Error; err != nil {
+		return song, fiber.NewError(fiber.StatusNotFound, fmt.Sprintf("song with id %s not found", id))
 	}
 
 	return song, nil

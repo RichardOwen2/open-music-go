@@ -1,27 +1,37 @@
 package main
 
 import (
+	"openmusic-api/app"
+	"openmusic-api/controller"
 	"openmusic-api/exception"
 	"openmusic-api/helper"
-	"openmusic-api/model/web"
+	"openmusic-api/repository"
+	"openmusic-api/routes"
+	"openmusic-api/service"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 )
 
 func main() {
-	app := fiber.New(fiber.Config{
+	fiber := fiber.New(fiber.Config{
 		ErrorHandler: exception.ErrorHandler,
 	})
 
-	app.Get("/", func(c *fiber.Ctx) error {
-		return c.Status(fiber.StatusInternalServerError).JSON(web.ResponseWithData{
-			BaseResponse: web.BaseResponse{
-				Code:   fiber.StatusInternalServerError,
-				Status: "dwd",
-			},
-		})
-	})
+	db := app.OpenConnection()
+	validate := validator.New()
 
-	err := app.Listen(":3000")
+	songRepository := repository.NewSongRepositoryImpl()
+	songService := service.NewSongServiceImpl(songRepository, db, validate)
+	songController := controller.NewSongController(songService)
+
+	albumRepository := repository.NewAlbumRepositoryImpl()
+	albumService := service.NewAlbumServiceImpl(albumRepository, db, validate)
+	albumController := controller.NewAlbumController(albumService)
+
+	routes.SongRoutes(fiber, songController)
+	routes.AlbumRoutes(fiber, albumController)
+
+	err := fiber.Listen(":3000")
 	helper.PanicIfError(err)
 }

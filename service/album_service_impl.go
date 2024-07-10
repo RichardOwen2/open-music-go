@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"openmusic-api/helper"
 	"openmusic-api/model/domain"
 	"openmusic-api/model/web"
 	"openmusic-api/repository"
@@ -60,14 +62,47 @@ func (s *AlbumServiceImpl) Update(ctx context.Context, request web.AlbumUpdateRe
 	}
 
 	tx := s.db.Begin()
+
+	exist, err := s.AlbumRepository.Exist(ctx, tx, request.ID)
+
+	if err := helper.ErrorIfNotExist(fmt.Sprintf("album with id %s not found", request.ID), exist, err); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	_, err = s.AlbumRepository.Update(ctx, tx, domain.Album{
+		ID:   request.ID,
+		Name: request.Name,
+		Year: request.Year,
+	})
+
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return nil
+}
+
+func (s *AlbumServiceImpl) Delete(ctx context.Context, id string) error {
+	tx := s.db.Begin()
 	if tx.Error != nil {
 		return tx.Error
 	}
 
-	_, err := s.AlbumRepository.Update(ctx, tx, domain.Album{
-		ID:   request.ID,
-		Name: request.Name,
-		Year: request.Year,
+	exist, err := s.AlbumRepository.Exist(ctx, tx, id)
+
+	if err := helper.ErrorIfNotExist(fmt.Sprintf("album with id %s not found", id), exist, err); err != nil {
+		return err
+	}
+
+	err = s.AlbumRepository.Delete(ctx, tx, domain.Album{
+		ID: id,
 	})
 
 	if err != nil {
@@ -82,14 +117,35 @@ func (s *AlbumServiceImpl) Update(ctx context.Context, request web.AlbumUpdateRe
 	return nil
 }
 
-func (s *AlbumServiceImpl) Delete(ctx context.Context, categoryId int) error {
-	panic("implement me")
-}
+func (s *AlbumServiceImpl) FindById(ctx context.Context, id string) (web.AlbumDataResponse, error) {
+	album, err := s.AlbumRepository.FindById(ctx, s.db, id)
 
-func (s *AlbumServiceImpl) FindById(ctx context.Context, categoryId int) (web.AlbumDataResponse, error) {
-	panic("implement me")
+	if err != nil {
+		return web.AlbumDataResponse{}, err
+	}
+
+	return web.AlbumDataResponse{
+		ID:   album.ID,
+		Name: album.Name,
+		Year: album.Year,
+	}, nil
 }
 
 func (s *AlbumServiceImpl) FindAll(ctx context.Context) ([]web.AlbumDataResponse, error) {
-	panic("implement me")
+	albums, err := s.AlbumRepository.FindAll(ctx, s.db)
+
+	if err != nil {
+		return []web.AlbumDataResponse{}, err
+	}
+
+	var albumResponses []web.AlbumDataResponse
+	for _, album := range albums {
+		albumResponses = append(albumResponses, web.AlbumDataResponse{
+			ID:   album.ID,
+			Name: album.Name,
+			Year: album.Year,
+		})
+	}
+
+	return albumResponses, nil
 }
